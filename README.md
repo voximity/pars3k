@@ -209,7 +209,7 @@ an amalgam parser that uses commas. It is called from `Parse.delimited_list(Pars
 ```cr
 word = Parser.word
 optional_whitespace = Parser.many_of Parser.char ' '
-comma = Parser.char ',' << optional_whitespace
+comma = (Parser.char ',') << optional_whitespace
 
 list_parser = Parse.delimited_list word, comma
 
