@@ -11,9 +11,15 @@ def concatenate(array : Array(Char)) : String
 	result
 end
 
-alphabet = parse_one_char_of "abcdefghijklmnopqrstuvwxyz"
-word = (parse_one_or_more_of alphabet).transform { |chars| concatenate chars }
 whitespace = parse_many_of parse_char ' '
 comma = (parse_char ',') << whitespace
 
-puts (parse_delimited_list word, comma).parse "hello, world,       how,are,   you" #=> ["hello", "world", "how", "are", "you"]
+key_value = parse_monad({
+	key <= parse_word,
+	colon <= whitespace >> (parse_char ':') << whitespace,
+	value <= parse_word,
+	Parser.const({key, value})
+})
+
+puts key_value.parse("hello: world")
+puts parse_delimited_list(key_value, comma).parse("hello: world, greetings: man")

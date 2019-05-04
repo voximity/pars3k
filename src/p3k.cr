@@ -1,4 +1,31 @@
 module Pars3k
+	NON_EXPRESSION_TYPES = ["Assign", "TypeNode", "Splat", "Union", "UninitializedVar", "TypeDeclaration", "Generic", "ClassDef", "Def", "VisibilityModifier", "MultiAssign"]
+
+	macro parse_monad(body)
+		{% if NON_EXPRESSION_TYPES.includes? body[body.size - 1].class_name %}
+			{{body[body.size - 1].raise "expected last operation in monad to be an expression, got a '#{body[body.size - 1].class_name}'"}}
+		{% end %}
+		{{body[0].args[0]}}.sequence do |{{body[0].receiver}}|
+		{% for i in 1...body.size - 1 %}
+			{% if body[i].class_name == "Assign" %}
+				{{body[i].target}} = {{body[i].value}}
+			{% else %}
+				{% if body[i].class_name == "Call" && body[i].name == "<=" %}
+					{{body[i].args[0]}}.sequence do |{{body[i].receiver}}|
+				{% else %}
+					{{body[i].raise "expected operation '<=' or '=', got '#{body[i].name}'"}}
+				{% end %}
+			{% end %}
+		{% end %}
+		{{body[body.size - 1]}}
+		{% for i in 1...body.size - 1 %}
+			{% if body[i].class_name == "Call" %}
+				end
+			{% end %}
+		{% end %}
+		end
+	end
+
 	# A struct containing information about the current Parser's context.
 	# Used to chain Parsers together and retain input position.
 	struct ParseContext
@@ -286,6 +313,30 @@ module Pars3k
 			end
 			ParseResult(Array(A)).new results, context
 		end
+	end
+
+	# Helpful default parsers
+
+	def concatenate(chars : Array(Chars))
+		r = ""
+		chars.each { |c| r += c }
+		r
+	end
+
+	def parse_alphabet_lower
+		parse_one_char_of "abcdefghijklmnopqrstuvwxyz"
+	end
+
+	def parse_alphabet_upper
+		parse_one_char_of "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	end
+
+	def parse_alphabet
+		parse_alphabet_lower | parse_alphabet_upper
+	end
+
+	def parse_word
+		(parse_one_or_more_of parse_alphabet).transform { |c| concatenate c }
 	end
 end
 
