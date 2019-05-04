@@ -1,4 +1,5 @@
 module Pars3k
+	extend self
 	NON_EXPRESSION_TYPES = ["Assign", "TypeNode", "Splat", "Union", "UninitializedVar", "TypeDeclaration", "Generic", "ClassDef", "Def", "VisibilityModifier", "MultiAssign"]
 
 	macro do_parse(body)
@@ -153,6 +154,19 @@ module Pars3k
 			parser
 		end
 
+		# Creates a parser that parses everything but a specific set of characters
+		def self.no_char_of(string : String) : Parser(Char)
+			Parser(Char).new do |context|
+				if context.position >= context.parsing.size
+					ParseResult(Char).error "expected none of '#{string}', input ended", context
+				elsif string.includes? context.parsing[context.position]
+					ParseResult(Char).error "expected none of '#{string}', got #{context.parsing[context.position]}", context
+				else
+					ParseResult(Char).new context.parsing[context.position], context.next
+				end
+			end
+		end
+
 		# Creates a parser that allows repetition of a specific parser consistently, until it is no longer parsed successfully.
 		def self.many_of(parser : Parser(T)) : Parser(Array(T)) forall T
 			Parser(Array(T)).new do |ctx|
@@ -188,6 +202,38 @@ module Pars3k
 			end
 		end
 
+		def self.some_of(parser : Parser(T), range : Range) : Parser(Array(T)) forall T
+			max = range.end - (range.excludes_end? ? 1 : 0)
+			Parser(Array(T)).new do |ctx|
+				count = 0
+				result = parser.block.call ctx
+				if result.errored && !range.includes? count
+					next ParseResult(Array(T)).error result.definite_error
+				end
+				results = [] of T
+				context = ctx
+				count += 1
+				while !result.errored
+					context = result.context
+					results << result.definite_value
+					result = parser.block.call context
+					count += 1
+					if count > max
+						count = max
+						break
+					end
+				end
+				unless range.includes? count
+					next ParseResult(Array(T)).error "expected #{range} parses, got #{count} parses", context
+				end
+				ParseResult(Array(T)).new results, context
+			end
+		end
+
+		def self.one_of?(parser : Parser(T)) : Parser(Array(T)) forall T
+			some_of parser, ..1
+		end
+
 		# Creates a parser that parses a delimited list of items parsed by `parser`, and delimited by parser `delimiter`.
 		# Useful for when you want to extract a list of parsable items by, say, commas.
 		def self.delimited_list(parser : Parser(A), delimiter : Parser(B)) : Parser(Array(A)) forall A, B
@@ -213,6 +259,10 @@ module Pars3k
 			end
 		end
 
+		def self.join(parser : Parser(Array(Char))) : Parser(String)
+			parser.transform &.reduce "" { |v, c| v + c }
+		end
+
 		def self.alphabet_lower
 			one_char_of "abcdefghijklmnopqrstuvwxyz"
 		end
@@ -227,6 +277,23 @@ module Pars3k
 
 		def self.word
 			(one_or_more_of alphabet).transform { |c| concatenate c }
+		end
+
+		def self.digit
+			one_char_of "0123456789"
+		end
+
+		def self.int
+			(one_or_more_of digit).transform { |c| (concatenate c).to_i }
+		end
+
+		def self.float
+			do_parse({
+				whole <= (join one_or_more_of digit),
+				_ <= (one_of? char '.'),
+				decimal <= (join many_of digit),
+				constant "#{whole}#{decimal.size == 0 ? "" : "." + decimal}".to_f
+			})
 		end
 	end
 
@@ -331,6 +398,25 @@ module Pars3k
 					other.block.call context
 				else
 					result
+				end
+			end
+		end
+
+		# Given `A / B`, creates a new parser that succeeds when
+		# A succeeds or B succeeds. Checks A first, doesn't check B
+		# if A succeeds. Ignores type differences, gives union type.
+		def /(other : Parser(B)) : Parser(T | B) forall B
+			Parser(T | B).new do |context|
+				result = @block.call context
+				if result.errored
+					new_result = other.block.call result.context
+					if new_result.errored
+						ParseResult(T | B).error new_result.definite_error
+					else
+						ParseResult(T | B).new new_result.definite_value, new_result.context
+					end
+				else
+					ParseResult(T | B).new result.definite_value, result.context
 				end
 			end
 		end
