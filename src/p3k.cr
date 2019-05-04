@@ -1,5 +1,6 @@
 module Pars3k
-
+	# A struct containing information about the current Parser's context.
+	# Used to chain Parsers together and retain input position.
 	struct ParseContext
 		getter parsing
 		getter position
@@ -16,6 +17,7 @@ module Pars3k
 		end
 	end
 
+	# A struct containing information about a parse error.
 	struct ParseError
 		getter context
 		getter message
@@ -28,6 +30,11 @@ module Pars3k
 		end
 	end
 
+	# ParseResult(T) is a result of a parsed Parser with return type T.
+	# If the parse errored, then `ParseResult(T)#errored` will be true.
+	# Otherwise, you can get a value of type `(T | ParseError)` with `ParseResult(T).value`.
+	# If you are absolutely positive the parse did NOT error (e.g. `!ParseResult(T).errored`),
+	# then you can acquire the value of type `T` with `ParseResult(T).definite_value`.
 	struct ParseResult(T)
 		def self.error(e : ParseError)
 			inst = ParseResult(T).allocate
@@ -76,6 +83,7 @@ module Pars3k
 		end
 	end
 
+	# Parser(T) is a parser with return type T.
 	class Parser(T)
 		def self.const(value : T)
 			Parser(T).new { |ctx| ParseResult(T).new value, ctx }
@@ -87,12 +95,20 @@ module Pars3k
 			@block = block
 		end
 
+		# Parses the input string `input` given the parser's logic provided
+		# by its block at definition.
 		def parse(input : String) : (T | ParseError)
 			context = ParseContext.new input
 			result = @block.call context
 			result.value
 		end
 
+		# Transforms the result of the parser such that, when the parser is
+		# parsed, the output value becomes a different value.
+		# For example, if you took a Parser(Char) and wanted to transform
+		# it to a Parser(String) by `Char.to_s`, then you could use
+		# `Parser(Char).transform { |char| char.to_s }`. It is similar to
+		# a map method on arrays from other languages.
 		def transform(&new_block : T -> B) : Parser(B) forall B
 			Parser(B).new do |context|
 				result = @block.call context
@@ -104,6 +120,9 @@ module Pars3k
 			end
 		end
 
+		# Sequences the current parser with another parser.
+		# Expects a block that receives the result of the current parser
+		# and returns a new parser of any type, presumably dynamically created.
 		def sequence(&new_block : T -> Parser(B)) : Parser(B) forall B
 			Parser(B).new do |context|
 				result = @block.call context
@@ -116,10 +135,13 @@ module Pars3k
 			end
 		end
 
+		# Sequences the current parser with another parser given they are the same type.
 		def +(other : Parser(B)) : Parser(B) forall B
 			sequence { |_| other }
 		end
 
+		# Sequences the current parser with another parser, and disregards the other parser's result,
+		# but ensures the two succeed.
 		def <<(other : Parser(B)) : Parser(T) forall B
 			Parser(T).new do |context|
 				result = @block.call context
@@ -137,6 +159,8 @@ module Pars3k
 			end
 		end
 
+		# Sequences the current parser with another parser, and disregards the original parser's result,
+		# but ensures the two succeed.
 		def >>(other : Parser(B)) : Parser(B) forall B
 			Parser(B).new do |context|
 				result = @block.call context
@@ -149,6 +173,9 @@ module Pars3k
 			end
 		end
 
+		# Given `A | B`, creates a new parser that succeeds when
+		# A succeeds or B succeeds. Checks A first, doesn't check B
+		# if A succeeds.
 		def |(other : Parser(T)) : Parser(T)
 			Parser(T).new do |context|
 				result = @block.call context
@@ -164,6 +191,7 @@ module Pars3k
 
 	# PREDEFINED PARSERS
 
+	# Creates a parser that parses a specific character.
 	def parse_char(char : Char) : Parser(Char)
 		Parser(Char).new do |context|
 			if context.position >= context.parsing.size
@@ -176,6 +204,7 @@ module Pars3k
 		end
 	end
 
+	# Creates a parser that parses a specific string.
 	def parse_string(string : String) : Parser(String)
 		if string.size == 0
 			Parser(String).const ""
@@ -190,6 +219,7 @@ module Pars3k
 		end
 	end
 
+	# Creates a parser that parses a specific set of characters, given the character is in the string.
 	def parse_one_char_of(string : String) : Parser(Char)
 		parser = parse_char string[0]
 		(1...string.size).each do |index|
@@ -198,6 +228,7 @@ module Pars3k
 		parser
 	end
 
+	# Creates a parser that allows repetition of a specific parser consistently, until it is no longer parsed successfully.
 	def parse_many_of(parser : Parser(T)) : Parser(Array(T)) forall T
 		Parser(Array(T)).new do |ctx|
 			result = parser.block.call ctx
@@ -214,6 +245,7 @@ module Pars3k
 		end
 	end
 
+	# Like `parse_many_of`, but requires at least one parse result to succeed.
 	def parse_one_or_more_of(parser : Parser(T)) : Parser(Array(T)) forall T
 		Parser(Array(T)).new do |context|
 			result = parser.block.call context
@@ -231,6 +263,8 @@ module Pars3k
 		end
 	end
 
+	# Creates a parser that parses a delimited list of items parsed by `parser`, and delimited by parser `delimiter`.
+	# Useful for when you want to extract a list of parsable items by, say, commas.
 	def parse_delimited_list(parser : Parser(A), delimiter : Parser(B)) : Parser(Array(A)) forall A, B
 		Parser(Array(A)).new do |ctx|
 			result = parser.block.call ctx

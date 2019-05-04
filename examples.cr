@@ -1,3 +1,5 @@
+# This is just a test file. Nothing interesting is actually here!
+
 require "./src/p3k.cr"
 include Pars3k
 
@@ -14,4 +16,4 @@ word = (parse_one_or_more_of alphabet).transform { |chars| concatenate chars }
 whitespace = parse_many_of parse_char ' '
 comma = (parse_char ',') << whitespace
 
-puts (parse_delimited_list word, comma).parse "hello, world,       how,are,   you"
+puts (parse_delimited_list word, comma).parse "hello, world,       how,are,   you" #=> ["hello", "world", "how", "are", "you"]

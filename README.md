@@ -1,39 +1,11 @@
-# p3k
+# pars3k
 
-TODO: Write a description here
+pars3k (parsec/parse 3000) is a library for Crystal adding support for combinator parsers.
+The structure is heavily inspired by Parsec from Haskell.
 
-## Installation
+## Disclaimer
 
-1. Add the dependency to your `shard.yml`:
+This project, as of the time of writing, was made in 3 hours. It is highly experimental and lacks
+good documentation, however almost any form of parser will work.
 
-   ```yaml
-   dependencies:
-     p3k:
-       github: your-github-user/p3k
-   ```
-
-2. Run `shards install`
-
-## Usage
-
-```crystal
-require "p3k"
-```
-
-TODO: Write usage instructions here
-
-## Development
-
-TODO: Write development instructions here
-
-## Contributing
-
-1. Fork it (<https://github.com/your-github-user/p3k/fork>)
-2. Create your feature branch (`git checkout -b my-new-feature`)
-3. Commit your changes (`git commit -am 'Add some feature'`)
-4. Push to the branch (`git push origin my-new-feature`)
-5. Create a new Pull Request
-
-## Contributors
-
-- [your-name-here](https://github.com/your-github-user) - creator and maintainer
+### TODO: the rest of the readme
