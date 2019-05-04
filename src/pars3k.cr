@@ -230,6 +230,10 @@ module Pars3k
 			end
 		end
 
+		def self.some_of(parser : Parser(T), count : Int32) : Parser(Array(T)) forall T
+			some_of(parser, count..count)
+		end
+
 		def self.one_of?(parser : Parser(T)) : Parser(Array(T)) forall T
 			some_of parser, ..1
 		end
