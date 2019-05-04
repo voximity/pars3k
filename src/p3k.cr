@@ -1,17 +1,17 @@
 module Pars3k
 	NON_EXPRESSION_TYPES = ["Assign", "TypeNode", "Splat", "Union", "UninitializedVar", "TypeDeclaration", "Generic", "ClassDef", "Def", "VisibilityModifier", "MultiAssign"]
 
-	macro parse_monad(body)
+	macro do_parse(body)
 		{% if NON_EXPRESSION_TYPES.includes? body[body.size - 1].class_name %}
 			{{body[body.size - 1].raise "expected last operation in monad to be an expression, got a '#{body[body.size - 1].class_name}'"}}
 		{% end %}
-		({{body[0].args[0]}}).bind do |{{body[0].receiver}}|
+		({{body[0].args[0]}}).sequence do |{{body[0].receiver}}|
 		{% for i in 1...body.size - 1 %}
 			{% if body[i].class_name == "Assign" %}
 				{{body[i].target}} = {{body[i].value}}
 			{% else %}
 				{% if body[i].class_name == "Call" && body[i].name == "<=" %}
-					({{body[i].args[0]}}).bind do |{{body[i].receiver}}|
+					({{body[i].args[0]}}).sequence do |{{body[i].receiver}}|
 				{% else %}
 					{{body[i].raise "expected operation '<=' or '=', got '#{body[i].name}'"}}
 				{% end %}
@@ -110,8 +110,129 @@ module Pars3k
 		end
 	end
 
+	class Parse
+		# Creates a parser that always returns the same value of T.
+		def self.constant(value : T) : Parser(T) forall T
+			Parser(T).const value
+		end
+
+		# Creates a parser that parses a specific string.
+		def self.char(char : Char)
+			Parser(Char).new do |context|
+				if context.position >= context.parsing.size
+					ParseResult(Char).error "expected '#{char}', input ended", context
+				elsif context.parsing[context.position] == char
+					ParseResult(Char).new char, context.next
+				else
+					ParseResult(Char).error "expected '#{char}', got '#{context.parsing[context.position]}'", context
+				end
+			end
+		end
+
+		# Creates a parser that parses a specific string.
+		def self.string(string : String) : Parser(String)
+			if string.size == 0
+				constant ""
+			elsif string.size == 1
+				(char string[0]).transform { |c| c.to_s }
+			else
+				parser = char string[0]
+				string[1...string.size].chars.each do |char|
+					parser += char char
+				end
+				parser.transform { |_| string }
+			end
+		end
+
+		# Creates a parser that parses a specific set of characters, given the character is in the string.
+		def self.one_char_of(string : String) : Parser(Char)
+			parser = char string[0]
+			(1...string.size).each do |index|
+				parser |= char string[index]
+			end
+			parser
+		end
+
+		# Creates a parser that allows repetition of a specific parser consistently, until it is no longer parsed successfully.
+		def self.many_of(parser : Parser(T)) : Parser(Array(T)) forall T
+			Parser(Array(T)).new do |ctx|
+				result = parser.block.call ctx
+				results = [] of T
+				context = ctx
+				count = 1
+				while !result.errored
+					context = result.context
+					results << result.definite_value
+					result = parser.block.call context
+					count += 1
+				end
+				ParseResult(Array(T)).new results, context
+			end
+		end
+
+		# Like `many_of`, but requires at least one parse result to succeed.
+		def self.one_or_more_of(parser : Parser(T)) : Parser(Array(T)) forall T
+			Parser(Array(T)).new do |context|
+				result = parser.block.call context
+				if result.errored
+					ParseResult(Array(T)).error result.definite_error
+				else
+					chars = [result.definite_value]
+					new_parser = many_of parser
+					new_result = new_parser.block.call result.context
+					new_result.definite_value.each do |char|
+						chars << char
+					end
+					ParseResult(Array(T)).new chars, new_result.context
+				end
+			end
+		end
+
+		# Creates a parser that parses a delimited list of items parsed by `parser`, and delimited by parser `delimiter`.
+		# Useful for when you want to extract a list of parsable items by, say, commas.
+		def self.delimited_list(parser : Parser(A), delimiter : Parser(B)) : Parser(Array(A)) forall A, B
+			Parser(Array(A)).new do |ctx|
+				result = parser.block.call ctx
+				if result.errored
+					next ParseResult(Array(A)).error result.definite_error
+				end
+				results = [result.definite_value]
+				context = ctx
+				count = 1
+				delimiter_result = delimiter.block.call result.context
+				while !delimiter_result.errored
+					result = parser.block.call delimiter_result.context
+					if result.errored
+						break
+					end
+					context = result.context
+					results << result.definite_value
+					delimiter_result = delimiter.block.call context
+				end
+				ParseResult(Array(A)).new results, context
+			end
+		end
+
+		def self.alphabet_lower
+			one_char_of "abcdefghijklmnopqrstuvwxyz"
+		end
+
+		def self.alphabet_upper
+			one_char_of "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+		end
+
+		def self.alphabet
+			alphabet_lower | alphabet_upper
+		end
+
+		def self.word
+			(one_or_more_of alphabet).transform { |c| concatenate c }
+		end
+	end
+
 	# Parser(T) is a parser with return type T.
 	class Parser(T)
+		# Parser.const(T) returns a parser that always succeeds with value of type T.
 		def self.const(value : T)
 			Parser(T).new { |ctx| ParseResult(T).new value, ctx }
 		end
@@ -150,7 +271,7 @@ module Pars3k
 		# Sequences the current parser with another parser.
 		# Expects a block that receives the result of the current parser
 		# and returns a new parser of any type, presumably dynamically created.
-		def bind(&new_block : T -> Parser(B)) : Parser(B) forall B
+		def sequence(&new_block : T -> Parser(B)) : Parser(B) forall B
 			Parser(B).new do |context|
 				result = @block.call context
 				if result.errored
@@ -164,7 +285,7 @@ module Pars3k
 
 		# Sequences the current parser with another parser given they are the same type.
 		def +(other : Parser(B)) : Parser(B) forall B
-			bind { |_| other }
+			sequence { |_| other }
 		end
 
 		# Sequences the current parser with another parser, and disregards the other parser's result,
@@ -215,128 +336,8 @@ module Pars3k
 		end
 	end
 
-
-	# PREDEFINED PARSERS
-
-	# Creates a parser that parses a specific character.
-	def parse_char(char : Char) : Parser(Char)
-		Parser(Char).new do |context|
-			if context.position >= context.parsing.size
-				ParseResult(Char).error "expected '#{char}', input ended", context
-			elsif context.parsing[context.position] == char
-				ParseResult(Char).new char, context.next
-			else
-				ParseResult(Char).error "expected '#{char}', got '#{context.parsing[context.position]}'", context
-			end
-		end
-	end
-
-	# Creates a parser that parses a specific string.
-	def parse_string(string : String) : Parser(String)
-		if string.size == 0
-			Parser(String).const ""
-		elsif string.size == 1
-			(parse_char string[0]).transform { |c| c.to_s }
-		else
-			parser = parse_char string[0]
-			string[1...string.size].chars.each do |char|
-				parser += parse_char char
-			end
-			parser.transform { |_| string }
-		end
-	end
-
-	# Creates a parser that parses a specific set of characters, given the character is in the string.
-	def parse_one_char_of(string : String) : Parser(Char)
-		parser = parse_char string[0]
-		(1...string.size).each do |index|
-			parser |= parse_char string[index]
-		end
-		parser
-	end
-
-	# Creates a parser that allows repetition of a specific parser consistently, until it is no longer parsed successfully.
-	def parse_many_of(parser : Parser(T)) : Parser(Array(T)) forall T
-		Parser(Array(T)).new do |ctx|
-			result = parser.block.call ctx
-			results = [] of T
-			context = ctx
-			count = 1
-			while !result.errored
-				context = result.context
-				results << result.definite_value
-				result = parser.block.call context
-				count += 1
-			end
-			ParseResult(Array(T)).new results, context
-		end
-	end
-
-	# Like `parse_many_of`, but requires at least one parse result to succeed.
-	def parse_one_or_more_of(parser : Parser(T)) : Parser(Array(T)) forall T
-		Parser(Array(T)).new do |context|
-			result = parser.block.call context
-			if result.errored
-				ParseResult(Array(T)).error result.definite_error
-			else
-				chars = [result.definite_value]
-				new_parser = parse_many_of parser
-				new_result = new_parser.block.call result.context
-				new_result.definite_value.each do |char|
-					chars << char
-				end
-				ParseResult(Array(T)).new chars, new_result.context
-			end
-		end
-	end
-
-	# Creates a parser that parses a delimited list of items parsed by `parser`, and delimited by parser `delimiter`.
-	# Useful for when you want to extract a list of parsable items by, say, commas.
-	def parse_delimited_list(parser : Parser(A), delimiter : Parser(B)) : Parser(Array(A)) forall A, B
-		Parser(Array(A)).new do |ctx|
-			result = parser.block.call ctx
-			if result.errored
-				next ParseResult(Array(A)).error result.definite_error
-			end
-			results = [result.definite_value]
-			context = ctx
-			count = 1
-			delimiter_result = delimiter.block.call result.context
-			while !delimiter_result.errored
-				result = parser.block.call delimiter_result.context
-				if result.errored
-					break
-				end
-				context = result.context
-				results << result.definite_value
-				delimiter_result = delimiter.block.call context
-			end
-			ParseResult(Array(A)).new results, context
-		end
-	end
-
-	# Helpful default parsers
-
-	def concatenate(chars : Array(Chars))
-		r = ""
-		chars.each { |c| r += c }
-		r
-	end
-
-	def parse_alphabet_lower
-		parse_one_char_of "abcdefghijklmnopqrstuvwxyz"
-	end
-
-	def parse_alphabet_upper
-		parse_one_char_of "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-	end
-
-	def parse_alphabet
-		parse_alphabet_lower | parse_alphabet_upper
-	end
-
-	def parse_word
-		(parse_one_or_more_of parse_alphabet).transform { |c| concatenate c }
+	def concatenate(chars : Array(Char))
+		chars.reduce "" { |v, c| v + c }
 	end
 end
 

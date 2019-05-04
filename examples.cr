@@ -3,22 +3,20 @@
 require "./src/p3k.cr"
 include Pars3k
 
-def concatenate(array : Array(Char)) : String
-	result = ""
-	array.each do |char|
-		result += char
-	end
-	result
-end
+#whitespace = Parse.many_of Parse.char ' '
+#comma = (Parse.char ',') << (whitespace)
+#colon = (whitespace) >> (Parse.char ':') << (whitespace)
 
-whitespace = parse_many_of parse_char ' '
-comma = (parse_char ',') << whitespace
+#key_value = parse_monad({
+#	key <= Parse.word,
+#	colon <= colon,
+#	value <= Parse.word,
+#	Parser.const({key, value})
+#})
 
-key_value = parse_monad({
-	key <= parse_word,
-	colon <= whitespace >> (parse_char ':') << whitespace,
-	value <= parse_word,
-	Parser.const({key, value})
-})
+#puts Parse.delimited_list(key_value, comma).parse("hello: world, greetings: man,yeet     :haha")
 
-puts parse_delimited_list(key_value, comma).parse("hello: world, greetings: man,yeet     :haha")
+digit = (Parse.one_char_of "0123456789").transform { |char| char.to_i }
+
+puts digit.parse "1" #=> 1
+puts (digit.parse "1").class #=> 
