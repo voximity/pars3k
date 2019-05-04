@@ -1,0 +1,9 @@
+name: pars3k
+version: 0.1.0
+
+authors:
+  - voximity <vox@voximity.net>
+
+crystal: 0.28.0
+
+license: MIT
