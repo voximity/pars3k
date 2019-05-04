@@ -21,5 +21,4 @@ key_value = parse_monad({
 	Parser.const({key, value})
 })
 
-puts key_value.parse("hello: world")
-puts parse_delimited_list(key_value, comma).parse("hello: world, greetings: man")
+puts parse_delimited_list(key_value, comma).parse("hello: world, greetings: man,yeet     :haha")
