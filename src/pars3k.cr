@@ -230,7 +230,7 @@ module Pars3k
 				unless range.includes? count
 					next ParseResult(Array(T)).error "expected #{range} parses, got #{count} parses", context
 				end
-				ParseResult(Array(T)).new results, context
+				ParseResult(Array(T)).new results, result.context
 			end
 		end
 
