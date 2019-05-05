@@ -246,8 +246,34 @@ module Pars3k
 			some_of(parser, count..count)
 		end
 
-		def self.one_of?(parser : Parser(T)) : Parser(Array(T)) forall T
+		def self.one_of(parser : Parser(T)) : Parser(Array(T)) forall T
 			some_of parser, ..1
+		end
+
+		def self.one_of?(parser : Parser(T)) : Parser(T?) forall T
+			Parser(T?).new do |context|
+				result = parser.block.call context
+				if result.errored
+					ParseResult(T?).new(nil, result.context)
+				else
+					ParseResult(T?).new(result.definite_value.as T, result.context)
+				end
+			end
+		end
+
+		def self.if_not_nil?(parser : Parser(T), value : B) : Parser(T?) forall T, B
+			if value.nil?
+				Parser(T?).new { |context| ParseResult(T?).new(nil, context) }
+			else
+				Parser(T?).new do |context|
+					result = parser.block.call context
+					if result.errored
+						ParseResult(T?).error result.definite_error
+					else
+						ParseResult(T?).new result.definite_value.as T, result.context
+					end
+				end
+			end
 		end
 
 		# Creates a parser that parses a delimited list of items parsed by `parser`, and delimited by parser `delimiter`.
@@ -308,7 +334,7 @@ module Pars3k
 				whole <= (join one_or_more_of digit),
 				_ <= (one_of? char '.'),
 				decimal <= (join many_of digit),
-				constant "#{whole}#{decimal.size == 0 ? "" : "." + decimal}".to_f
+				constant "#{whole}#{decimal.size == 0 ? ".0" : "." + decimal}".to_f
 			})
 		end
 	end
