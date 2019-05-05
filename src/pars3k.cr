@@ -54,7 +54,7 @@ module Pars3k
 		end
 
 		def to_s
-			@message
+			"(#{@context.parsing}:#{@context.position}) #{@message}"
 		end
 	end
 
