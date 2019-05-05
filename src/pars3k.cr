@@ -56,6 +56,10 @@ module Pars3k
 		def to_s
 			"(#{@context.parsing}:#{@context.position}) #{@message}"
 		end
+
+		def to_s(io)
+			io << to_s
+		end
 	end
 
 	# ParseResult(T) is a result of a parsed Parser with return type T.
