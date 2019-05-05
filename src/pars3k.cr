@@ -13,14 +13,16 @@ module Pars3k
 			{% else %}
 				{% if body[i].class_name == "Call" && body[i].name == "<=" %}
 					({{body[i].args[0]}}).sequence do |{{body[i].receiver}}|
-				{% else %}
+				{% elsif NON_EXPRESSION_TYPES.includes? body[i].class_name %}
 					{{body[i].raise "expected operation '<=' or '=', got '#{body[i].name}'"}}
+				{% else %}
+					{{body[i]}}
 				{% end %}
 			{% end %}
 		{% end %}
 		{{body[body.size - 1]}}
 		{% for i in 1...body.size - 1 %}
-			{% if body[i].class_name == "Call" %}
+			{% if body[i].class_name == "Call" && body[i].name == "<=" %}
 				end
 			{% end %}
 		{% end %}
@@ -42,6 +44,12 @@ module Pars3k
 
 		def set_position(pos)
 			@position = pos
+		end
+
+		def debug(text : String)
+			puts parsing
+			puts "-" * position + "|"
+			puts "#{text.upcase}: #{position}"
 		end
 	end
 
@@ -250,7 +258,7 @@ module Pars3k
 				if result.errored
 					next ParseResult(Array(A)).error result.definite_error
 				end
-				results = [result.definite_value]
+				results = [result.definite_value] of A
 				context = ctx
 				count = 1
 				delimiter_result = delimiter.block.call result.context
@@ -263,7 +271,7 @@ module Pars3k
 					results << result.definite_value
 					delimiter_result = delimiter.block.call context
 				end
-				ParseResult(Array(A)).new results, context
+				ParseResult(Array(A)).new results, delimiter_result.context
 			end
 		end
 
