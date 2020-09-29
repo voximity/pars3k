@@ -508,6 +508,10 @@ module Pars3k
 				constant "#{whole}#{decimal.size == 0 ? ".0" : "." + decimal}".to_f
 			})
 		end
+
+		private def self.concatenate(chars : Array(Char))
+			chars.reduce "" { |v, c| v + c }
+		end
 	end
 
 	# Parser(T) is a parser with return type T.
@@ -633,10 +637,6 @@ module Pars3k
 				end
 			end
 		end
-	end
-
-	def concatenate(chars : Array(Char))
-		chars.reduce "" { |v, c| v + c }
 	end
 end
 
