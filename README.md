@@ -23,7 +23,7 @@ contain some use cases using pars3k.
 ## Usage
 
 ```cr
-require "p3k"
+require "pars3k"
 include Pars3k
 ```
 

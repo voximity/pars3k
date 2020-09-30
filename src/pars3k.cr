@@ -469,7 +469,7 @@ module Pars3k
 		#
 		# Parses a full word of at least one character.
 		def self.word
-			(one_or_more_of alphabet).transform { |c| concatenate c }
+			(one_or_more_of alphabet).transform &.join
 		end
 
 		# ```cr
@@ -487,7 +487,7 @@ module Pars3k
 		#
 		# Parses an integer as an actual `Int`.
 		def self.int
-			(one_or_more_of digit).transform { |c| (concatenate c).to_i }
+			(one_or_more_of digit).transform &.join
 		end
 
 		# ```cr
@@ -633,10 +633,6 @@ module Pars3k
 				end
 			end
 		end
-	end
-
-	def concatenate(chars : Array(Char))
-		chars.reduce "" { |v, c| v + c }
 	end
 end
 
